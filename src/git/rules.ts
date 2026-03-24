@@ -1,5 +1,5 @@
 import { globToRegExp } from "@std/path";
-import type { CodeRule } from "./types.ts";
+import type { CodeRule } from "../types.ts";
 
 const CODERULE_PATTERN = /CODERULE(?:\[([^\]]*)\])?\s*:\s*(.+)/;
 

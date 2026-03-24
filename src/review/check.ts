@@ -1,13 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { CheckOptions, CodeRule, ReportedIssue } from "./types.ts";
-import { discoverRules, isRuleActive } from "./rules.ts";
+import type { CheckOptions, CodeRule, ReportedIssue } from "../types.ts";
+import { discoverRules, isRuleActive } from "../git/rules.ts";
 import {
   extractChangedFiles,
   getBaseCommit,
   getDiff,
   stripBinaryDiffs,
-} from "./diff.ts";
-import { checkRuleNonAgentic } from "./checker.ts";
+} from "../git/diff.ts";
+import { checkRuleNonAgentic } from "./anthropic.ts";
 import { checkClaudeAvailable, checkRuleAgentic } from "./agentic.ts";
 
 export type CheckResult =

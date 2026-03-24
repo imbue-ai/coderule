@@ -4,7 +4,7 @@ import {
   extractChangedFiles,
   findSnippetLine,
   stripBinaryDiffs,
-} from "../../src/diff.ts";
+} from "../../src/git/diff.ts";
 
 const SAMPLE_DIFF = `diff --git a/src/foo.ts b/src/foo.ts
 index 1234567..abcdefg 100644
@@ -120,4 +120,11 @@ Deno.test("findSnippetLine - returns null for non-matching snippet", () => {
 Deno.test("findSnippetLine - returns null for empty snippet", () => {
   const line = findSnippetLine(SAMPLE_DIFF, "src/foo.ts", "");
   assertEquals(line, null);
+});
+
+Deno.test("findSnippetLine - matches multi-line snippet via any line", () => {
+  // Snippet where the key part (console.log) is on line 2
+  const multiLine = 'function hello() {\n  console.log("hello");\n}';
+  const line = findSnippetLine(SAMPLE_DIFF, "src/bar.ts", multiLine);
+  assertEquals(line, 6);
 });

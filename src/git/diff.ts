@@ -45,13 +45,15 @@ export async function getBaseCommit(
   return new TextDecoder().decode(result.stdout).trim();
 }
 
-/** Get the unified diff. */
+// Get the unified diff.
 export async function getDiff(
   repoPath: string,
   baseCommit: string,
   staged: boolean,
 ): Promise<string> {
-  const args = staged ? ["diff", "--staged"] : ["diff", `${baseCommit}..HEAD`];
+  // --staged: only staged changes vs HEAD
+  // otherwise: diff base commit against working tree (includes uncommitted changes)
+  const args = staged ? ["diff", "--staged"] : ["diff", baseCommit];
 
   const cmd = new Deno.Command("git", {
     args,
@@ -68,7 +70,7 @@ export async function getDiff(
   return new TextDecoder().decode(result.stdout);
 }
 
-/** Strip binary file diffs from unified diff output. */
+// Strip binary file diffs from unified diff output.
 export function stripBinaryDiffs(diff: string): string {
   const lines = diff.split("\n");
   const result: string[] = [];
@@ -83,7 +85,6 @@ export function stripBinaryDiffs(diff: string): string {
       line.includes("GIT binary patch")
     ) {
       skipUntilNextDiff = true;
-      // Remove the preceding "diff --git" line for this binary file
       while (
         result.length > 0 &&
         !result[result.length - 1].startsWith("diff --git")
@@ -112,7 +113,6 @@ export function extractChangedFiles(diff: string): string[] {
 }
 
 // Build a map of file -> added lines from a unified diff.
-// Returns { "path/to/file": [lineNum1, lineNum2, ...] } for all added lines.
 export function buildDiffLineMap(diff: string): Map<string, number[]> {
   const map = new Map<string, number[]>();
   let currentFile: string | null = null;
@@ -140,7 +140,6 @@ export function buildDiffLineMap(diff: string): Map<string, number[]> {
     } else if (line.startsWith("-")) {
       // Deleted lines don't advance the new-file line counter
     } else {
-      // Context line
       currentLine++;
     }
   }
@@ -149,7 +148,7 @@ export function buildDiffLineMap(diff: string): Map<string, number[]> {
 }
 
 // Find the best matching line number for a code snippet in the diff.
-// Searches added lines in the given file for a substring match.
+// Tries each line of the snippet against added lines in the given file.
 export function findSnippetLine(
   diff: string,
   file: string,
@@ -157,11 +156,17 @@ export function findSnippetLine(
 ): number | null {
   if (!snippet.trim()) return null;
 
-  const lines = diff.split("\n");
+  const searchTerms = snippet
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (searchTerms.length === 0) return null;
+
+  const diffLines = diff.split("\n");
   let currentFile: string | null = null;
   let currentLine = 0;
 
-  for (const line of lines) {
+  for (const line of diffLines) {
     const fileMatch = line.match(/^\+\+\+ [ab]\/(.+)$/);
     if (fileMatch) {
       currentFile = fileMatch[1];
@@ -178,12 +183,12 @@ export function findSnippetLine(
 
     if (line.startsWith("+")) {
       const content = line.substring(1);
-      if (content.includes(snippet.trim().split("\n")[0].trim())) {
+      if (searchTerms.some((term) => content.includes(term))) {
         return currentLine;
       }
       currentLine++;
     } else if (line.startsWith("-")) {
-      // skip
+      // Deleted lines don't advance new-file counter
     } else {
       currentLine++;
     }

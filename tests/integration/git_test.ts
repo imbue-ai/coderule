@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { getBaseCommit, getDiff } from "../../src/diff.ts";
-import { discoverRules } from "../../src/rules.ts";
+import { getBaseCommit, getDiff } from "../../src/git/diff.ts";
+import { discoverRules } from "../../src/git/rules.ts";
 
 async function createTempRepo(): Promise<string> {
   const dir = await Deno.makeTempDir({ prefix: "coderule_test_" });

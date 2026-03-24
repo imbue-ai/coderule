@@ -10,7 +10,8 @@
     "test": "deno test --allow-run --allow-read --allow-write --allow-env --allow-net tests/",
     "test:unit": "deno test --allow-run --allow-read --allow-write --allow-env tests/unit/",
     "test:integration": "deno test --allow-run --allow-read --allow-write --allow-env tests/integration/",
-    "test:e2e": "CODERULE_E2E=1 deno test --allow-run --allow-read --allow-write --allow-env --allow-net tests/e2e/"
+    "test:e2e": "CODERULE_E2E=1 deno test --allow-run --allow-read --allow-write --allow-env --allow-net tests/e2e/",
+    "test:all": "CODERULE_E2E=1 deno test -A"
   },
   "compilerOptions": {
     "strict": true

@@ -1,5 +1,5 @@
-import type { CodeRule, RuleCheckResult } from "./types.ts";
-import { RULE_CHECK_SCHEMA } from "./types.ts";
+import type { CodeRule, RuleCheckResult } from "../types.ts";
+import { RULE_CHECK_SCHEMA } from "../types.ts";
 
 const AGENTIC_PROMPT_TEMPLATE =
   `You are a code reviewer. Your task is to check whether a code rule has been violated by the changes on the current branch.

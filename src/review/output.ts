@@ -1,9 +1,9 @@
-import { findSnippetLine } from "./diff.ts";
+import { findSnippetLine } from "../git/diff.ts";
 import type {
   GitHubReviewComment,
   GitHubReviewPayload,
   ReportedIssue,
-} from "./types.ts";
+} from "../types.ts";
 
 // Format issues as human-readable text.
 export function formatText(issues: ReportedIssue[]): string {

@@ -4,7 +4,7 @@ import {
   matchGlob,
   parseCodeRuleLine,
   parseGrepOutput,
-} from "../../src/rules.ts";
+} from "../../src/git/rules.ts";
 
 Deno.test("parseCodeRuleLine - parses basic CODERULE with no path mask", () => {
   const result = parseCodeRuleLine(

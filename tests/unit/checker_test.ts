@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import { buildNonAgenticPrompt } from "../../src/checker.ts";
-import { buildAgenticPrompt } from "../../src/agentic.ts";
+import { buildNonAgenticPrompt } from "../../src/review/anthropic.ts";
+import { buildAgenticPrompt } from "../../src/review/agentic.ts";
 
 Deno.test("buildNonAgenticPrompt - inserts rule text and diff", () => {
   const prompt = buildNonAgenticPrompt("no console.log", "diff content here");

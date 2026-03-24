@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { formatGitHub, formatJson, formatText } from "../../src/output.ts";
+import { formatGitHub, formatJson, formatText } from "../../src/review/output.ts";
 import type { ReportedIssue } from "../../src/types.ts";
 
 const SAMPLE_DIFF = `diff --git a/src/utils.ts b/src/utils.ts

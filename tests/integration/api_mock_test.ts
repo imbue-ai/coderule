@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { buildNonAgenticPrompt } from "../../src/checker.ts";
-import { buildAgenticPrompt } from "../../src/agentic.ts";
+import { buildNonAgenticPrompt } from "../../src/review/anthropic.ts";
+import { buildAgenticPrompt } from "../../src/review/agentic.ts";
 import { RULE_CHECK_SCHEMA } from "../../src/types.ts";
 import type { RuleCheckResult } from "../../src/types.ts";
 
