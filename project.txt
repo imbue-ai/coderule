@@ -1,5 +1,5 @@
 
-Your job is to make a CLI tool in Rust called coderule that performs codebase-specific agentic code reviews.
+Your job is to make a CLI tool in TypeScript (Deno) called coderule that performs codebase-specific agentic code reviews.
 
 The basic idea for this tool is this:
 * Users can write CODERULE: [some rule that needs to be checked] anywhere in the code 
@@ -10,17 +10,160 @@ The basic idea for this tool is this:
 
 There are two modes this program can work in: non-agentic and agentic. 
 
-In non-agentic mode, the program makes a simple LLM call to Anthropic for every active rule, passing in the rule and the git diffs in the prompt. 
+--- Non-agentic mode ---
 
-In agentic mode, the program spawns a claude code instance for every active rule, prompting it to check git diffs against the rule and verify compliance.
+In non-agentic mode, the program makes a single Anthropic Messages API call for every active rule.
+
+Getting the diff:
+    The base commit is determined as follows:
+        1. If --base-commit is provided, use that directly.
+        2. If --staged is provided, diff against HEAD (staged changes only).
+        3. Otherwise, auto-detect: run `git rev-parse --abbrev-ref origin/HEAD` to find the default branch, falling back to "main" if that fails. Then use `git merge-base <default-branch> HEAD` as the base.
+    The diff is obtained by running `git diff <base>..HEAD`.
+    Binary file diffs are stripped out before sending to the LLM (they're not useful for rule checking).
+    The diff is passed in unified diff format.
+    If the diff exceeds the model's context window (after accounting for the prompt), exit with an error message suggesting the user use a narrower --base-commit or switch to --agentic mode.
+
+The prompt structure:
+    The prompt is a single user message with the following structure:
+
+    ```
+    You are a code reviewer. Your task is to check whether a code rule has been violated by the changes in a diff.
+
+    === RULE ===
+    {rule_text}
+    === END RULE ===
+
+    === DIFF BEGIN (unified diff; lines starting with `-` are removed and `+` are added) ===
+    {unified_diff}
+    === DIFF END ===
+
+    Analyze the diff and determine whether it violates the rule stated above.
+
+    Only report violations that were introduced by the diff. Do not report pre-existing issues.
+    It is perfectly fine to report no violations if the diff does not violate the rule.
+    ```
+
+The API call:
+    Uses the Anthropic Messages API (not the legacy completions API).
+    The model defaults to claude-sonnet-4-5-20250929 but can be overridden with --model.
+    Temperature is set to 0 for deterministic results.
+    The response JSON schema is enforced via structured outputs using `output_config`:
+        output_config: {
+            format: {
+                type: "json_schema",
+                schema: {
+                    type: "object",
+                    properties: {
+                        violated: { type: "boolean" },
+                        confidence: { type: "number" },
+                        explanation: { type: "string" },
+                        violations: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    description: { type: "string" },
+                                    file: { type: "string" },
+                                    code_snippet: { type: "string" }
+                                },
+                                required: ["description", "file", "code_snippet"],
+                                additionalProperties: false
+                            }
+                        }
+                    },
+                    required: ["violated", "confidence", "explanation", "violations"],
+                    additionalProperties: false
+                }
+            }
+        }
+    This guarantees the response is always valid JSON matching the schema — no manual parsing or retries needed.
+
+Response handling:
+    The structured JSON response is deserialized directly into a typed TypeScript interface.
+    Rules where violated=true are collected and reported to the user.
+
+--- Agentic mode ---
+
+In agentic mode, the program spawns a Claude Code subprocess for every active rule using `claude` CLI in print mode.
+
+Invocation:
+    Each rule gets its own Claude Code process, spawned via:
+        claude -p \
+            --output-format json \
+            --model <model> \
+            --allowedTools "Read Grep Glob" \
+            --permission-mode bypassPermissions \
+            --json-schema '<schema>' \
+            "<prompt>"
+
+    The --json-schema flag enforces structured output matching the same schema used in non-agentic mode.
+    The --allowedTools flag restricts Claude to read-only tools: Read, Grep, and Glob. No Bash, Edit, or Write.
+    The --permission-mode bypassPermissions flag avoids interactive permission prompts since we've already restricted the tool set.
+    The -p (print) flag runs non-interactively: it takes the prompt, produces output, and exits.
+    The --output-format json flag returns structured JSON including the model's response and usage metadata.
+
+The prompt:
+    ```
+    You are a code reviewer. Your task is to check whether a code rule has been violated by the changes on the current branch.
+
+    === RULE ===
+    {rule_text}
+    === END RULE ===
+
+    The diff for the current branch is below. You also have access to the Read, Grep, and Glob tools to explore the codebase for additional context if needed.
+
+    === DIFF BEGIN (unified diff; lines starting with `-` are removed and `+` are added) ===
+    {unified_diff}
+    === DIFF END ===
+
+    Analyze the diff and determine whether it violates the rule stated above.
+    Use the available tools to read relevant files if the diff alone is not sufficient to determine compliance.
+    Only report violations that were introduced by the diff. Do not report pre-existing issues.
+    It is perfectly fine to report no violations if the diff does not violate the rule.
+    ```
+
+Response handling:
+    The --output-format json response contains a `result` field with the model's structured output (matching the --json-schema).
+    This is parsed the same way as non-agentic mode — deserialized into the same TypeScript interface.
+
+--- Common ---
 
 In both cases, the AI should either say that the diff is okay and doesn't contradict the rule, OR they should provide a justification explaining how the rule was violated.
 
+Violation output includes the rule's source location (file path and line number where the CODERULE annotation was found) so the user can trace back to which rule triggered the violation.
+
+Prerequisites:
+    When --agentic is used, coderule checks that `claude` is available on PATH before starting any checks.
+    If not found, exit with code 2 and a message directing the user to install Claude Code.
+
+===== Authentication =====
+    Non-agentic mode requires the ANTHROPIC_API_KEY environment variable to be set. If missing, exit with an error message.
+    Agentic mode uses Claude Code's own authentication (no API key needed from coderule).
+
+===== Exit codes =====
+    0: no violations found
+    1: one or more violations found
+    2: error (bad arguments, API failure, missing API key, diff too large, etc.)
+
 ===== Subcommands =====
     coderule (or coderule check): runs the coderule check
-        --json: output the issues in JSON format
         --agentic: use claude code to verify the rule instead of a simple LLM call
         --model <model>: specify model to use. Works for both agentic and non-agentic modes
+        --base-commit <ref>: git commit, branch, or ref to diff against (default: auto-detect merge base against main)
+        --staged: only analyze staged changes (mutually exclusive with --base-commit)
+        --confidence-threshold <0.0-1.0>: minimum confidence score for violations to be reported (default: 0.5)
+        --max-workers <n>: maximum number of parallel rule checks (default: 5)
+        --repo <path>: path to the repository to analyze (default: current directory)
+        --output-format <format>: output format — "text" (default), "json", or "github"
+            text: human-readable output with rule, file location, and description
+            json: machine-readable JSON with { "issues": [...] }
+            github: JSON payload suitable for the GitHub PR review API (POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews).
+                    Produces { "body": "summary", "event": "COMMENT", "comments": [...] } where each comment has
+                    "path", "line", "side": "RIGHT", and "body" fields. Issues without a file location are included
+                    in the top-level body instead of as inline comments.
+        --quiet: suppress status messages, only output violations
+        --verbose: increase verbosity (show which rules are being checked, timing, etc.)
     coderule list: list active coderules
         --all: lists all coderules, not just the active ones
 
@@ -29,3 +172,78 @@ In both cases, the AI should either say that the diff is okay and doesn't contra
     CODERULE[path/*/mask/*.ext]: rule => the rule is only active when the modified files in the diff contain at least one file that matches the path mask
 
 Coderules are found via git grep, therefore ignoring gitignored files. However, they untracked files should still be grepped for rules.
+
+===== Testing strategy =====
+
+Use Deno's built-in test runner (`deno test`).
+
+--- Unit tests (no external dependencies) ---
+
+Rule parsing:
+    - Parses `CODERULE: some rule` with no path mask
+    - Parses `CODERULE[src/**/*.ts]: some rule` with path mask
+    - Handles edge cases: multiple CODERULEs on adjacent lines, CODERULE inside strings/comments, malformed annotations (missing colon, unclosed brackets)
+    - Extracts correct file path and line number for rule source location
+
+Path mask matching:
+    - Glob patterns match against file paths from the diff
+    - Rules with no mask are always active
+    - Rules with masks are active only when at least one changed file matches
+
+Diff processing:
+    - Strips binary file diffs from unified diff output
+    - Extracts list of changed file paths from diff headers
+    - Handles empty diffs gracefully
+
+Output formatting:
+    - Text format includes rule source location, violation description, and file/snippet
+    - JSON format matches the expected schema
+    - GitHub format produces correct PR review API payload structure (inline comments with path/line, body-only for locationless issues)
+
+Confidence filtering:
+    - Violations below --confidence-threshold are excluded
+    - Violations at or above threshold are included
+
+Argument parsing:
+    - --staged and --base-commit are mutually exclusive
+    - Default values are correct
+    - Invalid arguments produce exit code 2
+
+--- Integration tests (use real git repos) ---
+
+Create temporary git repos in test setup (git init, create commits, create branches) to test:
+
+Git operations:
+    - Diff generation between branches produces correct unified diff
+    - Merge base detection finds the right commit
+    - Default branch detection via `git rev-parse --abbrev-ref origin/HEAD` with fallback to "main"
+    - --staged produces diff of only staged changes
+    - Binary files are excluded from the diff sent to the LLM
+
+Rule discovery:
+    - `git grep` finds CODERULEs in tracked files
+    - Untracked files are also searched for CODERULEs
+    - Gitignored files are excluded
+
+--- API tests (mocked) ---
+
+Mock the Anthropic API client to test:
+    - Correct prompt construction (rule text and diff are inserted into the template)
+    - Structured output schema is passed in the request
+    - Response deserialization into TypeScript types
+    - Missing ANTHROPIC_API_KEY produces exit code 2 with a helpful message
+
+Mock the `claude` subprocess to test:
+    - Correct CLI arguments are passed (--allowedTools, --permission-mode, --json-schema, etc.)
+    - Structured JSON response from claude is parsed correctly
+    - Missing `claude` binary produces exit code 2 with install instructions
+
+--- End-to-end tests ---
+
+A small number of E2E tests that run the full coderule binary against a test fixture repo:
+    - Repo with a violated rule → exit code 1, violation reported
+    - Repo with no violations → exit code 0
+    - Repo with no changes → exit code 0, "no changes" message
+    - `coderule list` shows discovered rules
+
+These tests hit the real Anthropic API / Claude CLI, so they are gated behind an environment variable (e.g. CODERULE_E2E=1) and skipped by default.
