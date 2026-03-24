@@ -1,0 +1,31 @@
+
+Your job is to make a CLI tool in Rust called coderule that performs codebase-specific agentic code reviews.
+
+The basic idea for this tool is this:
+* Users can write CODERULE: [some rule that needs to be checked] anywhere in the code 
+* When `coderule` is run, it greps the codebase for these rules and uses AI to verify that they haven't been violated by the diffs on the current branch
+* Any issues are reported to the user
+
+===== How the AI check Works =====
+
+There are two modes this program can work in: non-agentic and agentic. 
+
+In non-agentic mode, the program makes a simple LLM call to Anthropic for every active rule, passing in the rule and the git diffs in the prompt. 
+
+In agentic mode, the program spawns a claude code instance for every active rule, prompting it to check git diffs against the rule and verify compliance.
+
+In both cases, the AI should either say that the diff is okay and doesn't contradict the rule, OR they should provide a justification explaining how the rule was violated.
+
+===== Subcommands =====
+    coderule (or coderule check): runs the coderule check
+        --json: output the issues in JSON format
+        --agentic: use claude code to verify the rule instead of a simple LLM call
+        --model <model>: specify model to use. Works for both agentic and non-agentic modes
+    coderule list: list active coderules
+        --all: lists all coderules, not just the active ones
+
+===== Coderule format =====
+    CODERULE: rule => the rule is always active
+    CODERULE[path/*/mask/*.ext]: rule => the rule is only active when the modified files in the diff contain at least one file that matches the path mask
+
+Coderules are found via git grep, therefore ignoring gitignored files. However, they untracked files should still be grepped for rules.
