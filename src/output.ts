@@ -1,10 +1,11 @@
+import { findSnippetLine } from "./diff.ts";
 import type {
   GitHubReviewComment,
   GitHubReviewPayload,
   ReportedIssue,
 } from "./types.ts";
 
-/** Format issues as human-readable text. */
+// Format issues as human-readable text.
 export function formatText(issues: ReportedIssue[]): string {
   if (issues.length === 0) return "No violations found.";
 
@@ -26,7 +27,7 @@ export function formatText(issues: ReportedIssue[]): string {
   return lines.join("\n");
 }
 
-/** Format issues as JSON. */
+// Format issues as JSON.
 export function formatJson(issues: ReportedIssue[]): string {
   const payload = {
     issues: issues.map((issue) => ({
@@ -45,16 +46,19 @@ export function formatJson(issues: ReportedIssue[]): string {
   return JSON.stringify(payload, null, 2);
 }
 
-/** Format issues as a GitHub PR review API payload. */
-export function formatGitHub(issues: ReportedIssue[]): string {
+// Format issues as a GitHub PR review API payload.
+// Takes the unified diff to map violations to actual line numbers.
+export function formatGitHub(
+  issues: ReportedIssue[],
+  diff: string,
+): string {
   const comments: GitHubReviewComment[] = [];
   const bodyParts: string[] = [];
 
   for (const issue of issues) {
     for (const v of issue.result.violations) {
       if (v.file && v.file !== "") {
-        // Try to extract line number from code_snippet or use 1
-        const line = extractLineNumber(v.code_snippet) || 1;
+        const line = findSnippetLine(diff, v.file, v.code_snippet) || 1;
         comments.push({
           path: v.file,
           line,
@@ -85,11 +89,4 @@ export function formatGitHub(issues: ReportedIssue[]): string {
   };
 
   return JSON.stringify(payload, null, 2);
-}
-
-/** Try to extract a line number from a code snippet context. */
-function extractLineNumber(snippet: string): number | null {
-  // Look for patterns like "line 42" or ":42:" in the snippet
-  const match = snippet.match(/(?:line\s+|:)(\d+)/i);
-  return match ? parseInt(match[1], 10) : null;
 }

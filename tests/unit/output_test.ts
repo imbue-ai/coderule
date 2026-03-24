@@ -2,6 +2,15 @@ import { assertEquals } from "@std/assert";
 import { formatGitHub, formatJson, formatText } from "../../src/output.ts";
 import type { ReportedIssue } from "../../src/types.ts";
 
+const SAMPLE_DIFF = `diff --git a/src/utils.ts b/src/utils.ts
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -1,3 +1,5 @@
+ const x = 1;
++console.log("debug")
++const y = 2;
+ const z = 3;`;
+
 const SAMPLE_ISSUE: ReportedIssue = {
   rule: {
     text: "no console.log",
@@ -52,8 +61,8 @@ Deno.test("formatJson - empty issues", () => {
   assertEquals(parsed.issues.length, 0);
 });
 
-Deno.test("formatGitHub - produces PR review payload", () => {
-  const result = formatGitHub([SAMPLE_ISSUE]);
+Deno.test("formatGitHub - produces PR review payload with correct line", () => {
+  const result = formatGitHub([SAMPLE_ISSUE], SAMPLE_DIFF);
   const parsed = JSON.parse(result);
   assertEquals(parsed.event, "COMMENT");
   assertEquals(typeof parsed.body, "string");
@@ -61,6 +70,8 @@ Deno.test("formatGitHub - produces PR review payload", () => {
   assertEquals(parsed.comments.length, 1);
   assertEquals(parsed.comments[0].path, "src/utils.ts");
   assertEquals(parsed.comments[0].side, "RIGHT");
+  // Line should be 2 because console.log("debug") is at new-file line 2
+  assertEquals(parsed.comments[0].line, 2);
 });
 
 Deno.test("formatGitHub - violation without file goes into body", () => {
@@ -84,7 +95,7 @@ Deno.test("formatGitHub - violation without file goes into body", () => {
       ],
     },
   };
-  const result = formatGitHub([issue]);
+  const result = formatGitHub([issue], "");
   const parsed = JSON.parse(result);
   assertEquals(parsed.comments.length, 0);
   assertEquals(parsed.body.includes("Something bad"), true);

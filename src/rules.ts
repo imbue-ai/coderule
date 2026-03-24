@@ -1,9 +1,9 @@
+import { globToRegExp } from "@std/path";
 import type { CodeRule } from "./types.ts";
 
-/** Regex to match CODERULE annotations with optional path mask. */
 const CODERULE_PATTERN = /CODERULE(?:\[([^\]]*)\])?\s*:\s*(.+)/;
 
-/** Parse a single line into a CodeRule, returning null if no match. */
+// Parse a single line into a CodeRule, returning null if no match.
 export function parseCodeRuleLine(
   line: string,
   file: string,
@@ -18,12 +18,11 @@ export function parseCodeRuleLine(
   return { text, file, line: lineNumber, pathMask };
 }
 
-/** Parse grep output (file:line:content) into CodeRules. */
+// Parse grep output (file:line:content) into CodeRules.
 export function parseGrepOutput(output: string): CodeRule[] {
   const rules: CodeRule[] = [];
   for (const line of output.split("\n")) {
     if (!line.trim()) continue;
-    // Format: file:lineNumber:content
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const secondColon = line.indexOf(":", colonIdx + 1);
@@ -41,14 +40,14 @@ export function parseGrepOutput(output: string): CodeRule[] {
   return rules;
 }
 
-/** Discover all CODERULE annotations in the repository. */
+// Discover all CODERULE annotations in the repository.
 export async function discoverRules(repoPath: string): Promise<CodeRule[]> {
   const rules: CodeRule[] = [];
 
   // 1. Search tracked files with git grep
   try {
     const gitGrep = new Deno.Command("git", {
-      args: ["grep", "-n", "CODERULE", "--", ":!project.txt"],
+      args: ["grep", "-n", "CODERULE"],
       cwd: repoPath,
       stdout: "piped",
       stderr: "piped",
@@ -97,7 +96,7 @@ export async function discoverRules(repoPath: string): Promise<CodeRule[]> {
   return rules;
 }
 
-/** Check if a rule is active given the list of changed files. */
+// Check if a rule is active given the list of changed files.
 export function isRuleActive(
   rule: CodeRule,
   changedFiles: string[],
@@ -106,41 +105,8 @@ export function isRuleActive(
   return changedFiles.some((file) => matchGlob(rule.pathMask!, file));
 }
 
-/** Simple glob matching supporting *, **, and ?. */
+// Match a file path against a glob pattern using @std/path.
 export function matchGlob(pattern: string, path: string): boolean {
-  const regexStr = globToRegex(pattern);
-  return new RegExp(`^${regexStr}$`).test(path);
-}
-
-/** Convert a glob pattern to a regex string. */
-function globToRegex(pattern: string): string {
-  let result = "";
-  let i = 0;
-  while (i < pattern.length) {
-    const char = pattern[i];
-    if (char === "*" && pattern[i + 1] === "*") {
-      // ** matches any number of path segments
-      if (pattern[i + 2] === "/") {
-        result += "(?:.+/)?";
-        i += 3;
-      } else {
-        result += ".*";
-        i += 2;
-      }
-    } else if (char === "*") {
-      // * matches anything except /
-      result += "[^/]*";
-      i++;
-    } else if (char === "?") {
-      result += "[^/]";
-      i++;
-    } else if (".+^${}()|[]\\".includes(char)) {
-      result += "\\" + char;
-      i++;
-    } else {
-      result += char;
-      i++;
-    }
-  }
-  return result;
+  const re = globToRegExp(pattern, { extended: true, globstar: true });
+  return re.test(path);
 }

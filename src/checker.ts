@@ -33,10 +33,9 @@ export async function checkRuleNonAgentic(
   rule: CodeRule,
   diff: string,
   model: string,
-  apiKey: string,
+  client: Anthropic,
 ): Promise<RuleCheckResult> {
   const prompt = buildNonAgenticPrompt(rule.text, diff);
-  const client = new Anthropic({ apiKey });
 
   const response = await client.messages.create({
     model,

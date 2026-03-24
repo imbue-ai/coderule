@@ -1,5 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { extractChangedFiles, stripBinaryDiffs } from "../../src/diff.ts";
+import {
+  buildDiffLineMap,
+  extractChangedFiles,
+  findSnippetLine,
+  stripBinaryDiffs,
+} from "../../src/diff.ts";
 
 const SAMPLE_DIFF = `diff --git a/src/foo.ts b/src/foo.ts
 index 1234567..abcdefg 100644
@@ -85,4 +90,34 @@ diff --git a/src/app.ts b/src/app.ts
   const result = stripBinaryDiffs(diff);
   assertEquals(result.includes("font.woff"), false);
   assertEquals(result.includes("import { foo }"), true);
+});
+
+Deno.test("buildDiffLineMap - maps added lines to correct line numbers", () => {
+  const map = buildDiffLineMap(SAMPLE_DIFF);
+  assertEquals(map.has("src/foo.ts"), true);
+  // "const y = 2;" is added at new-file line 2 (hunk starts at +1, context line 1, then added line 2)
+  assertEquals(map.get("src/foo.ts")!.includes(2), true);
+  assertEquals(map.has("src/bar.ts"), true);
+  // "console.log" is added at new-file line 6 (hunk starts at +5, context line 5, then added line 6)
+  assertEquals(map.get("src/bar.ts")!.includes(6), true);
+});
+
+Deno.test("findSnippetLine - finds snippet in diff", () => {
+  const line = findSnippetLine(SAMPLE_DIFF, "src/foo.ts", "const y = 2");
+  assertEquals(line, 2);
+});
+
+Deno.test("findSnippetLine - finds snippet in second file", () => {
+  const line = findSnippetLine(SAMPLE_DIFF, "src/bar.ts", "console.log");
+  assertEquals(line, 6);
+});
+
+Deno.test("findSnippetLine - returns null for non-matching snippet", () => {
+  const line = findSnippetLine(SAMPLE_DIFF, "src/foo.ts", "nonexistent");
+  assertEquals(line, null);
+});
+
+Deno.test("findSnippetLine - returns null for empty snippet", () => {
+  const line = findSnippetLine(SAMPLE_DIFF, "src/foo.ts", "");
+  assertEquals(line, null);
 });

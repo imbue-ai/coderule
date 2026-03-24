@@ -19,7 +19,7 @@ Use the available tools to read relevant files if the diff alone is not sufficie
 Only report violations that were introduced by the diff. Do not report pre-existing issues.
 It is perfectly fine to report no violations if the diff does not violate the rule.`;
 
-/** Build the prompt for agentic mode. */
+// Build the prompt for agentic mode.
 export function buildAgenticPrompt(
   ruleText: string,
   diff: string,
@@ -29,7 +29,7 @@ export function buildAgenticPrompt(
     .replace("{unified_diff}", diff);
 }
 
-/** Check that `claude` CLI is available on PATH. */
+// Check that `claude` CLI is available on PATH.
 export async function checkClaudeAvailable(): Promise<boolean> {
   try {
     const cmd = new Deno.Command("claude", {
@@ -44,7 +44,7 @@ export async function checkClaudeAvailable(): Promise<boolean> {
   }
 }
 
-/** Check a single rule using Claude Code in agentic mode. */
+// Check a single rule using Claude Code in agentic mode.
 export async function checkRuleAgentic(
   rule: CodeRule,
   diff: string,
@@ -57,18 +57,11 @@ export async function checkRuleAgentic(
   const cmd = new Deno.Command("claude", {
     args: [
       "-p",
-      "--output-format",
-      "json",
-      "--model",
-      model,
-      "--allowedTools",
-      "Read",
-      "Grep",
-      "Glob",
-      "--permission-mode",
-      "bypassPermissions",
-      "--json-schema",
-      schemaJson,
+      "--output-format", "json",
+      "--model", model,
+      "--allowedTools", "Read", "Grep", "Glob",
+      "--permission-mode", "bypassPermissions",
+      "--json-schema", schemaJson,
       prompt,
     ],
     cwd: repoPath,
@@ -83,13 +76,31 @@ export async function checkRuleAgentic(
   }
 
   const output = new TextDecoder().decode(result.stdout);
-  const data = JSON.parse(output);
 
-  // Claude Code --output-format json wraps the result
-  const resultText = data.result;
-  if (!resultText) {
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(output);
+  } catch {
+    throw new Error(
+      `Claude Code returned invalid JSON: ${output.substring(0, 200)}`,
+    );
+  }
+
+  const resultField = data.result;
+  if (resultField === undefined || resultField === null) {
     throw new Error("No result field in Claude Code output");
   }
 
-  return JSON.parse(resultText) as RuleCheckResult;
+  // result may be a JSON string or already-parsed object
+  if (typeof resultField === "string") {
+    try {
+      return JSON.parse(resultField) as RuleCheckResult;
+    } catch {
+      throw new Error(
+        `Claude Code result is not valid JSON: ${resultField.substring(0, 200)}`,
+      );
+    }
+  }
+
+  return resultField as RuleCheckResult;
 }

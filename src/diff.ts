@@ -99,15 +99,95 @@ export function stripBinaryDiffs(diff: string): string {
   return result.join("\n");
 }
 
-/** Extract changed file paths from a unified diff. */
+// Extract changed file paths from a unified diff.
 export function extractChangedFiles(diff: string): string[] {
   const files = new Set<string>();
   for (const line of diff.split("\n")) {
-    // Match +++ b/path/to/file or --- a/path/to/file
     const match = line.match(/^(?:\+\+\+|---) [ab]\/(.+)$/);
     if (match) {
       files.add(match[1]);
     }
   }
   return [...files];
+}
+
+// Build a map of file -> added lines from a unified diff.
+// Returns { "path/to/file": [lineNum1, lineNum2, ...] } for all added lines.
+export function buildDiffLineMap(diff: string): Map<string, number[]> {
+  const map = new Map<string, number[]>();
+  let currentFile: string | null = null;
+  let currentLine = 0;
+
+  for (const line of diff.split("\n")) {
+    const fileMatch = line.match(/^\+\+\+ [ab]\/(.+)$/);
+    if (fileMatch) {
+      currentFile = fileMatch[1];
+      if (!map.has(currentFile)) map.set(currentFile, []);
+      continue;
+    }
+
+    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      currentLine = parseInt(hunkMatch[1], 10);
+      continue;
+    }
+
+    if (currentFile === null) continue;
+
+    if (line.startsWith("+")) {
+      map.get(currentFile)!.push(currentLine);
+      currentLine++;
+    } else if (line.startsWith("-")) {
+      // Deleted lines don't advance the new-file line counter
+    } else {
+      // Context line
+      currentLine++;
+    }
+  }
+
+  return map;
+}
+
+// Find the best matching line number for a code snippet in the diff.
+// Searches added lines in the given file for a substring match.
+export function findSnippetLine(
+  diff: string,
+  file: string,
+  snippet: string,
+): number | null {
+  if (!snippet.trim()) return null;
+
+  const lines = diff.split("\n");
+  let currentFile: string | null = null;
+  let currentLine = 0;
+
+  for (const line of lines) {
+    const fileMatch = line.match(/^\+\+\+ [ab]\/(.+)$/);
+    if (fileMatch) {
+      currentFile = fileMatch[1];
+      continue;
+    }
+
+    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      currentLine = parseInt(hunkMatch[1], 10);
+      continue;
+    }
+
+    if (currentFile !== file) continue;
+
+    if (line.startsWith("+")) {
+      const content = line.substring(1);
+      if (content.includes(snippet.trim().split("\n")[0].trim())) {
+        return currentLine;
+      }
+      currentLine++;
+    } else if (line.startsWith("-")) {
+      // skip
+    } else {
+      currentLine++;
+    }
+  }
+
+  return null;
 }
