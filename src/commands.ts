@@ -96,6 +96,9 @@ export const cli = defineCli({
           "Error: ANTHROPIC_API_KEY environment variable is not set.",
         );
         Deno.exit(2);
+      } else if (result.status === "error") {
+        console.error(`Error: ${result.message}`);
+        Deno.exit(2);
       } else if (result.status === "no_rules") {
         log.info("No CODERULE annotations found.");
       } else if (result.status === "no_changes") {
@@ -134,13 +137,13 @@ export const cli = defineCli({
 
       let displayRules = rules;
       if (!args.all) {
-        try {
-          const base = await getBaseCommit(".", null, false);
-          const diff = await getDiff(".", base, false);
-          const changedFiles = extractChangedFiles(diff);
-          displayRules = rules.filter((r) => isRuleActive(r, changedFiles));
-        } catch {
-          displayRules = rules;
+        const baseResult = await getBaseCommit(".", null, false);
+        if (baseResult.ok) {
+          const diffResult = await getDiff(".", baseResult.value, false);
+          if (diffResult.ok) {
+            const changedFiles = extractChangedFiles(diffResult.value);
+            displayRules = rules.filter((r) => isRuleActive(r, changedFiles));
+          }
         }
       }
 

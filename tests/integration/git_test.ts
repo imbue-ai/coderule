@@ -60,8 +60,10 @@ Deno.test("git diff generation between branches", async () => {
     await gitRun(dir, ["add", "."]);
     await gitRun(dir, ["commit", "-m", "add y"]);
 
-    const diff = await getDiff(dir, baseCommit, false);
-    assertStringIncludes(diff, "+const y = 2;");
+    const diffResult = await getDiff(dir, baseCommit, false);
+    assertEquals(diffResult.ok, true);
+    if (!diffResult.ok) return;
+    assertStringIncludes(diffResult.value, "+const y = 2;");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -81,8 +83,10 @@ Deno.test("merge base detection with main branch", async () => {
     await gitRun(dir, ["add", "."]);
     await gitRun(dir, ["commit", "-m", "change"]);
 
-    const base = await getBaseCommit(dir, null, false);
-    assertEquals(base, mainCommit);
+    const baseResult = await getBaseCommit(dir, null, false);
+    assertEquals(baseResult.ok, true);
+    if (!baseResult.ok) return;
+    assertEquals(baseResult.value, mainCommit);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -105,10 +109,12 @@ Deno.test("staged changes diff", async () => {
       "const x = 1;\nconst staged = true;\nconst unstaged = true;\n",
     );
 
-    const diff = await getDiff(dir, "HEAD", true);
-    assertStringIncludes(diff, "+const staged = true;");
+    const diffResult = await getDiff(dir, "HEAD", true);
+    assertEquals(diffResult.ok, true);
+    if (!diffResult.ok) return;
+    assertStringIncludes(diffResult.value, "+const staged = true;");
     // Unstaged change should NOT be in the staged diff
-    assertEquals(diff.includes("unstaged"), false);
+    assertEquals(diffResult.value.includes("unstaged"), false);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -136,9 +142,11 @@ Deno.test("binary files are excluded from diff", async () => {
     await gitRun(dir, ["add", "."]);
     await gitRun(dir, ["commit", "-m", "update"]);
 
-    const diff = await getDiff(dir, base, false);
+    const diffResult = await getDiff(dir, base, false);
+    assertEquals(diffResult.ok, true);
+    if (!diffResult.ok) return;
     // The diff will contain a binary notice - we test stripBinaryDiffs in unit tests
-    assertStringIncludes(diff, "code changed");
+    assertStringIncludes(diffResult.value, "code changed");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

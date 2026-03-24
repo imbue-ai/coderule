@@ -1,4 +1,4 @@
-import type { CodeRule, RuleCheckResult } from "../types.ts";
+import type { CodeRule, Result, RuleCheckResult } from "../types.ts";
 import { RULE_CHECK_SCHEMA } from "../types.ts";
 
 const AGENTIC_PROMPT_TEMPLATE =
@@ -50,7 +50,7 @@ export async function checkRuleAgentic(
   diff: string,
   model: string,
   repoPath: string,
-): Promise<RuleCheckResult> {
+): Promise<Result<RuleCheckResult>> {
   const prompt = buildAgenticPrompt(rule.text, diff);
   const schemaJson = JSON.stringify(RULE_CHECK_SCHEMA);
 
@@ -72,7 +72,7 @@ export async function checkRuleAgentic(
   const result = await cmd.output();
   if (!result.success) {
     const stderr = new TextDecoder().decode(result.stderr);
-    throw new Error(`Claude Code subprocess failed: ${stderr}`);
+    return { ok: false, error: `Claude Code subprocess failed: ${stderr}` };
   }
 
   const output = new TextDecoder().decode(result.stdout);
@@ -81,26 +81,22 @@ export async function checkRuleAgentic(
   try {
     data = JSON.parse(output);
   } catch {
-    throw new Error(
-      `Claude Code returned invalid JSON: ${output.substring(0, 200)}`,
-    );
+    return { ok: false, error: `Claude Code returned invalid JSON: ${output.substring(0, 200)}` };
   }
 
   const resultField = data.result;
   if (resultField === undefined || resultField === null) {
-    throw new Error("No result field in Claude Code output");
+    return { ok: false, error: "No result field in Claude Code output" };
   }
 
   // result may be a JSON string or already-parsed object
   if (typeof resultField === "string") {
     try {
-      return JSON.parse(resultField) as RuleCheckResult;
+      return { ok: true, value: JSON.parse(resultField) as RuleCheckResult };
     } catch {
-      throw new Error(
-        `Claude Code result is not valid JSON: ${resultField.substring(0, 200)}`,
-      );
+      return { ok: false, error: `Claude Code result is not valid JSON: ${resultField.substring(0, 200)}` };
     }
   }
 
-  return resultField as RuleCheckResult;
+  return { ok: true, value: resultField as RuleCheckResult };
 }

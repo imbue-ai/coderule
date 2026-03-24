@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { CheckOptions, CodeRule, ReportedIssue } from "../types.ts";
+import type { CheckOptions, CodeRule, ReportedIssue, Result, RuleCheckResult } from "../types.ts";
 import { discoverRules, isRuleActive } from "../git/rules.ts";
 import {
   extractChangedFiles,
@@ -16,6 +16,7 @@ export type CheckResult =
   | { status: "no_active_rules" }
   | { status: "missing_api_key" }
   | { status: "missing_claude" }
+  | { status: "error"; message: string }
   | { status: "done"; issues: ReportedIssue[]; diff: string };
 
 export interface Logger {
@@ -46,9 +47,11 @@ export async function runCheck(
   log.verbose(`Found ${allRules.length} rule(s) total.`);
 
   log.info("Getting diff...");
-  const base = await getBaseCommit(repoPath, options.baseCommit, options.staged);
-  const rawDiff = await getDiff(repoPath, base, options.staged);
-  const diff = stripBinaryDiffs(rawDiff);
+  const baseResult = await getBaseCommit(repoPath, options.baseCommit, options.staged);
+  if (!baseResult.ok) return { status: "error", message: baseResult.error };
+  const rawDiffResult = await getDiff(repoPath, baseResult.value, options.staged);
+  if (!rawDiffResult.ok) return { status: "error", message: rawDiffResult.error };
+  const diff = stripBinaryDiffs(rawDiffResult.value);
 
   if (!diff.trim()) return { status: "no_changes" };
 
@@ -80,29 +83,37 @@ async function runChecks(
       batch.map(async (rule) => {
         log.verbose(`  Checking: ${rule.file}:${rule.line} - ${rule.text}`);
         const start = Date.now();
+        let checkResult: Result<RuleCheckResult>;
         try {
-          const result = options.agentic
+          checkResult = options.agentic
             ? await checkRuleAgentic(rule, diff, options.model, options.repo)
             : await checkRuleNonAgentic(rule, diff, options.model, client!);
-
-          log.verbose(
-            `  Done (${Date.now() - start}ms): ${rule.text} → ${
-              result.violated ? "VIOLATED" : "OK"
-            }`,
-          );
-
-          if (
-            result.violated &&
-            result.confidence >= options.confidenceThreshold
-          ) {
-            return { rule, result } as ReportedIssue;
-          }
         } catch (err) {
           log.info(
             `Error checking rule "${rule.text}": ${
               err instanceof Error ? err.message : err
             }`,
           );
+          return null;
+        }
+
+        if (!checkResult.ok) {
+          log.info(`Error checking rule "${rule.text}": ${checkResult.error}`);
+          return null;
+        }
+
+        const ruleResult = checkResult.value;
+        log.verbose(
+          `  Done (${Date.now() - start}ms): ${rule.text} → ${
+            ruleResult.violated ? "VIOLATED" : "OK"
+          }`,
+        );
+
+        if (
+          ruleResult.violated &&
+          ruleResult.confidence >= options.confidenceThreshold
+        ) {
+          return { rule, result: ruleResult } as ReportedIssue;
         }
         return null;
       }),

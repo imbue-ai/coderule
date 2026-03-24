@@ -1,3 +1,10 @@
+// CODERULE: Never use `throw` in source code. Use Result<T> discriminated unions for error reporting. Try/catch is allowed only for catching errors from external libraries.
+
+// Discriminated union for error reporting instead of throwing.
+export type Result<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
 // A parsed CODERULE annotation found in the codebase.
 export interface CodeRule {
   // The rule text after "CODERULE:"

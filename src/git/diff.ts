@@ -1,11 +1,13 @@
+import type { Result } from "../types.ts";
+
 /** Get the base commit to diff against. */
 export async function getBaseCommit(
   repoPath: string,
   baseCommit: string | null,
   staged: boolean,
-): Promise<string> {
-  if (baseCommit) return baseCommit;
-  if (staged) return "HEAD";
+): Promise<Result<string>> {
+  if (baseCommit) return { ok: true, value: baseCommit };
+  if (staged) return { ok: true, value: "HEAD" };
 
   // Auto-detect: find default branch via origin/HEAD
   let defaultBranch = "main";
@@ -36,13 +38,10 @@ export async function getBaseCommit(
   });
   const result = await cmd.output();
   if (!result.success) {
-    throw new Error(
-      `Failed to determine merge base against ${defaultBranch}: ${
-        new TextDecoder().decode(result.stderr)
-      }`,
-    );
+    const stderr = new TextDecoder().decode(result.stderr);
+    return { ok: false, error: `Failed to determine merge base against ${defaultBranch}: ${stderr}` };
   }
-  return new TextDecoder().decode(result.stdout).trim();
+  return { ok: true, value: new TextDecoder().decode(result.stdout).trim() };
 }
 
 // Get the unified diff.
@@ -50,7 +49,7 @@ export async function getDiff(
   repoPath: string,
   baseCommit: string,
   staged: boolean,
-): Promise<string> {
+): Promise<Result<string>> {
   // --staged: only staged changes vs HEAD
   // otherwise: diff base commit against working tree (includes uncommitted changes)
   const args = staged ? ["diff", "--staged"] : ["diff", baseCommit];
@@ -63,11 +62,10 @@ export async function getDiff(
   });
   const result = await cmd.output();
   if (!result.success) {
-    throw new Error(
-      `Failed to get diff: ${new TextDecoder().decode(result.stderr)}`,
-    );
+    const stderr = new TextDecoder().decode(result.stderr);
+    return { ok: false, error: `Failed to get diff: ${stderr}` };
   }
-  return new TextDecoder().decode(result.stdout);
+  return { ok: true, value: new TextDecoder().decode(result.stdout) };
 }
 
 // Strip binary file diffs from unified diff output.

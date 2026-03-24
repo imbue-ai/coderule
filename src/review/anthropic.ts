@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { CodeRule, RuleCheckResult } from "../types.ts";
+import type { CodeRule, Result, RuleCheckResult } from "../types.ts";
 import { RULE_CHECK_SCHEMA } from "../types.ts";
 
 const NON_AGENTIC_PROMPT_TEMPLATE =
@@ -34,7 +34,7 @@ export async function checkRuleNonAgentic(
   diff: string,
   model: string,
   client: Anthropic,
-): Promise<RuleCheckResult> {
+): Promise<Result<RuleCheckResult>> {
   const prompt = buildNonAgenticPrompt(rule.text, diff);
 
   const response = await client.messages.create({
@@ -52,8 +52,12 @@ export async function checkRuleNonAgentic(
 
   const textBlock = response.content.find((block) => block.type === "text");
   if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text content in API response");
+    return { ok: false, error: "No text content in API response" };
   }
 
-  return JSON.parse(textBlock.text) as RuleCheckResult;
+  try {
+    return { ok: true, value: JSON.parse(textBlock.text) as RuleCheckResult };
+  } catch {
+    return { ok: false, error: `API returned invalid JSON: ${textBlock.text.substring(0, 200)}` };
+  }
 }
