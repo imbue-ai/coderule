@@ -1,0 +1,52 @@
+name: Coderule Check
+description: Run coderule checks and post violations as PR review comments
+author: Imbue
+
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key
+    required: true
+  model:
+    description: Claude model to use
+    required: false
+    default: ""
+  confidence-threshold:
+    description: Minimum confidence score (0.0-1.0) to report a violation
+    required: false
+    default: ""
+  max-workers:
+    description: Maximum number of parallel workers
+    required: false
+    default: ""
+  fail-on-issues:
+    description: Fail the workflow when coderule finds violations
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install coderule
+      shell: bash
+      run: curl -fsSL https://raw.githubusercontent.com/imbue-ai/coderule/main/install.sh | bash
+      env:
+        CODERULE_INSTALL_DIR: /usr/local/bin
+
+    - name: Run coderule
+      if: github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        GH_TOKEN: ${{ github.token }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_CONFIDENCE_THRESHOLD: ${{ inputs.confidence-threshold }}
+        INPUT_MAX_WORKERS: ${{ inputs.max-workers }}
+        INPUT_FAIL_ON_ISSUES: ${{ inputs.fail-on-issues }}
+        INPUT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        INPUT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        INPUT_PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: python3 "${{ github.action_path }}/action/run.py"
