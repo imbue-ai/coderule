@@ -54,6 +54,49 @@ coderule --output-format json
 coderule --output-format github
 ```
 
+## GitHub Action
+
+Add coderule to your CI to automatically review pull requests:
+
+```yaml
+# .github/workflows/coderule.yml
+name: Coderule
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coderule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: imbue-ai/coderule@main
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+On pull requests, violations are posted as inline review comments. On push, violations are logged to the workflow output.
+
+**Inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `agentic` | `false` | Use Claude Code CLI for agentic review |
+| `model` | | Model to use |
+| `confidence-threshold` | | Minimum confidence (0.0-1.0) |
+| `max-workers` | | Parallel rule checks |
+| `fail-on-issues` | `false` | Fail the workflow on violations |
+
 ### List rules
 
 ```bash
