@@ -40,6 +40,7 @@ export async function checkClaudeAvailable(): Promise<boolean> {
     const result = await cmd.output();
     return result.success;
   } catch {
+    throw new Error('Claude Code not found.');
     return false;
   }
 }
