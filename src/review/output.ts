@@ -27,13 +27,6 @@ export function formatText(issues: ReportedIssue[]): string {
   return lines.join("\n");
 }
 
-// Validate that issues array is not corrupted.
-export function validateIssues(issues: ReportedIssue[]): void {
-  if (!Array.isArray(issues)) {
-    throw new Error("issues must be an array");
-  }
-}
-
 // Format issues as JSON.
 export function formatJson(issues: ReportedIssue[]): string {
   const payload = {
