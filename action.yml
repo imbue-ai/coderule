@@ -1,0 +1,79 @@
+name: Coderule Check
+description: Run coderule checks and post violations as PR review comments
+author: Imbue
+
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key
+    required: true
+  model:
+    description: Claude model to use
+    required: false
+  confidence-threshold:
+    description: Minimum confidence score (0.0-1.0) to report a violation
+    required: false
+
+outputs:
+  has-violations:
+    description: Whether any violations were found
+    value: ${{ steps.check.outputs.has_violations }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install coderule
+      shell: bash
+      run: curl -fsSL https://raw.githubusercontent.com/imbue-ai/coderule/main/install.sh | bash
+      env:
+        CODERULE_INSTALL_DIR: /usr/local/bin
+
+    - name: Determine base commit
+      id: base
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "commit=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "commit=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run coderule
+      id: check
+      shell: bash
+      run: |
+        ARGS="--base-commit ${{ steps.base.outputs.commit }}"
+
+        if [ -n "${{ inputs.model }}" ]; then
+          ARGS="$ARGS --model ${{ inputs.model }}"
+        fi
+        if [ -n "${{ inputs.confidence-threshold }}" ]; then
+          ARGS="$ARGS --confidence-threshold ${{ inputs.confidence-threshold }}"
+        fi
+
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          ARGS="$ARGS --output-format github"
+        fi
+
+        set +e
+        coderule check $ARGS > /tmp/coderule-output.txt
+        EXIT_CODE=$?
+        set -e
+
+        cat /tmp/coderule-output.txt >&2
+
+        if [ "$EXIT_CODE" = "1" ]; then
+          echo "has_violations=true" >> "$GITHUB_OUTPUT"
+        fi
+
+        exit "$EXIT_CODE"
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+
+    - name: Post PR review
+      if: failure() && github.event_name == 'pull_request' && steps.check.outputs.has_violations == 'true'
+      shell: bash
+      run: |
+        gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" \
+          --input /tmp/coderule-output.txt
+      env:
+        GH_TOKEN: ${{ github.token }}
